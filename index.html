@@ -319,7 +319,7 @@
 
    <!-- Disclaimer -->
    <div class="disclaimer">
-     ℹ Vereinfachtes Modell: Rollwiderstand + Luftwiderstand (∝ v²), kalibriert über Verbrauch bei 95 km/h. Reale Werte abhängig von Topografie, Wetter, Klima und Fahrweise.
+     ℹ Vereinfachtes Modell: Verbrauch = Roll-/Grundanteil + Luftwiderstandsanteil (∝ v²), kalibriert über den Verbrauch bei 95 km/h. Reale Werte abhängig von Topografie, Wetter, Klima und Fahrweise.
    </div>
  </div>
 </div>
@@ -370,10 +370,15 @@
 
 <script>
 // ─── State ────────────────────────────────────────────────────────────────────
+const MODEL_VERSION = 2;
+
 const DEFAULT = {
- batteryKwh: 77, baseConsumption: 13, cons95: 18,
+ modelVersion: MODEL_VERSION,
+ // Kia e-Soul-nahe Startwerte. Wichtig: baseConsumption ist nur der
+ // Roll-/Grundanteil am Verbrauch, nicht der Gesamtverbrauch bei 95 km/h.
+ batteryKwh: 64, baseConsumption: 7.5, cons95: 14,
  maxSoc: 0.9, minSoc: 0.1, startSoc: 0.9,
- chargePower: 150, pricePerKwh: 0.45,
+ chargePower: 75, pricePerKwh: 0.45,
  towingEnabled: false, towingWeightKg: 1500,
  towingBaseExtra: 5, towingCons95Extra: 10,
 };
@@ -385,20 +390,49 @@ let fixedSpeed = 120;
 
 // Persist
 function loadCfg() {
- try { const s = localStorage.getItem('evcfg'); if (s) return {...DEFAULT,...JSON.parse(s)}; } catch(e) {}
+ try {
+   const s = localStorage.getItem('evcfg');
+   if (s) {
+     const saved = JSON.parse(s);
+     const merged = {...DEFAULT, ...saved};
+
+     // Migration vom alten Modell: Dort lag der Grundverbrauch oft fast so
+     // hoch wie der Referenzverbrauch bei 95 km/h. Dadurch blieb bei 160 km/h
+     // fast kein Luftwiderstandsanteil übrig. Bei alten gespeicherten Settings
+     // wird dieser Wert einmalig plausibilisiert.
+     if (!saved.modelVersion || saved.modelVersion < MODEL_VERSION) {
+       const ref95 = Number(merged.cons95) || DEFAULT.cons95;
+       const oldBase = Number(merged.baseConsumption) || DEFAULT.baseConsumption;
+       if (oldBase > ref95 * 0.75) {
+         merged.baseConsumption = Math.round(ref95 * 0.54 * 10) / 10;
+       }
+       merged.modelVersion = MODEL_VERSION;
+       try { localStorage.setItem('evcfg', JSON.stringify(merged)); } catch(e) {}
+     }
+     return merged;
+   }
+ } catch(e) {}
  return {...DEFAULT};
 }
-function saveCfg() { try { localStorage.setItem('evcfg', JSON.stringify(cfg)); } catch(e) {} }
+function saveCfg() {
+ try { cfg.modelVersion = MODEL_VERSION; localStorage.setItem('evcfg', JSON.stringify(cfg)); } catch(e) {}
+}
 
 // ─── Physics ──────────────────────────────────────────────────────────────────
-function buildA(base, ref95) { return Math.max(0, (ref95 - base) / (95*95)); }
-
 function consumptionAt(v, c) {
- const a = buildA(c.baseConsumption, c.cons95);
- let cons = c.baseConsumption + a*v*v;
+ // Modell: Verbrauch = Roll-/Grundanteil + Luftwiderstandsanteil.
+ // Der Luftwiderstandsanteil wächst mit v² und wird über den 95-km/h-Wert kalibriert.
+ const refSpeed = 95;
+ const ref95 = Math.max(5, Number(c.cons95) || DEFAULT.cons95);
+ const base = Math.min(Math.max(3, Number(c.baseConsumption) || DEFAULT.baseConsumption), ref95 - 0.1);
+ const aeroAt95 = Math.max(0, ref95 - base);
+ let cons = base + aeroAt95 * Math.pow(v / refSpeed, 2);
+
  if (c.towingEnabled) {
-   const at = buildA(c.towingBaseExtra, c.towingCons95Extra);
-   cons += c.towingBaseExtra + at*v*v;
+   const towRef95 = Math.max(0, Number(c.towingCons95Extra) || 0);
+   const towBase = Math.min(Math.max(0, Number(c.towingBaseExtra) || 0), towRef95);
+   const towAero95 = Math.max(0, towRef95 - towBase);
+   cons += towBase + towAero95 * Math.pow(v / refSpeed, 2);
  }
  return Math.max(5, cons);
 }
@@ -566,7 +600,7 @@ function render() {
  }).join('');
 
  // Consumption table
- const speeds = [80,95,110,120,130,150].filter(v=>v<=maxV);
+ const speeds = [80,95,110,120,130,140,150,160].filter(v=>v<=maxV);
  const maxC = consumptionAt(maxV, cfg);
  document.getElementById('consTable').innerHTML = speeds.map(v => {
    const c = consumptionAt(v, cfg);
@@ -595,7 +629,7 @@ let draft = {};
 
 const SLIDERS = [
  { id:'batteryKwh',       label:'Batteriekapazität',       note:'',                            min:20,  max:150, step:1,    unit:' kWh',        color:'#7c6af7' },
- { id:'baseConsumption',  label:'Grundverbrauch',          note:'(Rollen+Klima, ~0 km/h)',     min:5,   max:20,  step:0.5,  unit:' kWh/100km',  color:'#7c6af7' },
+ { id:'baseConsumption',  label:'Roll-/Grundanteil',       note:'(Anteil bei 95 km/h)',         min:4,   max:20,  step:0.5,  unit:' kWh/100km',  color:'#7c6af7' },
  { id:'cons95',           label:'Verbrauch bei 95 km/h',   note:'(Referenzpunkt)',              min:10,  max:40,  step:0.5,  unit:' kWh/100km',  color:'#4fc3f7' },
  { id:'chargePower',      label:'Ladeleistung (DC)',        note:'',                            min:11,  max:350, step:5,    unit:' kW',         color:'#7c6af7' },
  { id:'startSoc',         label:'Start-Ladestand',         note:'',                            min:0.1, max:1,   step:0.05, unit:'%',  scale:100, color:'#7c6af7' },
