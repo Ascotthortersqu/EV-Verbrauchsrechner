@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="EV Optimal">
+<meta name="theme-color" content="#080812">
+<title>EV Route Optimizer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@700;900&display=swap" rel="stylesheet">
+<style>
+ *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+ html, body { height: 100%; background: #080812; color: #fff; font-family: 'Space Mono', monospace; overscroll-behavior: none; }
+ body { overflow-x: hidden; padding-bottom: env(safe-area-inset-bottom); }
+
+ input[type=range] {
+   -webkit-appearance: none; appearance: none;
+   width: 100%; height: 5px; background: #252545; border-radius: 3px;
+   cursor: pointer; display: block; outline: none;
+ }
+ input[type=range]::-webkit-slider-thumb {
+   -webkit-appearance: none; width: 24px; height: 24px;
+   border-radius: 50%; background: #7c6af7;
+   border: 3px solid #fff; box-shadow: 0 2px 8px #0008; cursor: pointer;
+ }
+
+ button { cursor: pointer; font-family: 'Space Mono', monospace; border: none; }
+ button:active { opacity: 0.75; transform: scale(0.97); transition: transform 0.08s; }
+
+ /* Scrollbar */
+ ::-webkit-scrollbar { width: 3px; }
+ ::-webkit-scrollbar-thumb { background: #252545; border-radius: 3px; }
+
+ /* ── Layout ── */
+ #app { min-height: 100vh; }
+
+ .header {
+   background: linear-gradient(160deg, #10102a 0%, #080812 100%);
+   border-bottom: 2px solid #1c1c38;
+   padding: 16px 18px 16px;
+   padding-top: calc(16px + env(safe-area-inset-top));
+   position: sticky; top: 0; z-index: 10;
+ }
+ .header-row { display: flex; justify-content: space-between; align-items: flex-start; }
+ .header-eyebrow { font-size: 9px; letter-spacing: 4px; color: #4fc3f7; margin-bottom: 4px; }
+ .header-title { font-family: 'Syne', sans-serif; font-size: 26px; font-weight: 900; line-height: 1.05; }
+ .header-title span { color: #7c6af7; }
+ .settings-btn {
+   background: #0e0e22; border: 2px solid #2e2e52; color: #a78bfa;
+   border-radius: 13px; padding: 9px 14px; font-size: 11px; letter-spacing: 1px;
+   flex-shrink: 0; margin-left: 12px;
+ }
+ .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+ .chip {
+   border-radius: 8px; padding: 3px 9px; font-size: 10px; font-weight: 700;
+   border: 1.5px solid; white-space: nowrap;
+ }
+
+ .main { padding: 18px 16px 0; max-width: 480px; margin: 0 auto; }
+
+ /* ── Cards ── */
+ .card {
+   background: #0c0c1e; border: 2px solid #252545; border-radius: 18px; padding: 18px 18px;
+   margin-bottom: 16px;
+ }
+ .card-label { color: #bbb; font-size: 10px; letter-spacing: 2px; margin-bottom: 10px; display: block; }
+
+ /* ── Distance ── */
+ .dist-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
+ .dist-val { font-size: 36px; font-weight: 900; color: #fff; line-height: 1; }
+ .dist-unit { font-size: 14px; color: #999; margin-left: 4px; }
+ .quick-btns { display: flex; gap: 6px; margin-top: 10px; }
+ .quick-btn {
+   flex: 1; background: #0a0a1c; border: 2px solid #252545; color: #aaa;
+   border-radius: 9px; padding: 7px 0; font-size: 10px; text-align: center;
+ }
+ .quick-btn.active { background: #7c6af7; border-color: #7c6af7; color: #fff; }
+
+ /* ── Mode grid ── */
+ .mode-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+ .mode-btn {
+   padding: 12px 3px; background: #0c0c1e; border: 2px solid #252545;
+   border-radius: 15px; text-align: center; transition: box-shadow 0.2s;
+ }
+ .mode-icon { font-size: 20px; margin-bottom: 4px; }
+ .mode-lbl { font-size: 8px; line-height: 1.5; }
+
+ /* ── Fix speed ── */
+ .fixspeed-card {
+   border-radius: 18px; padding: 18px 18px; margin-bottom: 16px;
+   border: 2px solid #a78bfa; background: #0c0c1e; box-shadow: 0 0 24px #a78bfa22;
+   display: none;
+ }
+ .fixspeed-card.visible { display: block; }
+ .fixspeed-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
+ .fixspeed-lbl { color: #a78bfa; font-size: 10px; letter-spacing: 2px; }
+ .fixspeed-val { font-size: 32px; font-weight: 900; color: #fff; }
+
+ /* ── Result card ── */
+ .result-card {
+   border-radius: 20px; padding: 22px 20px; position: relative; overflow: hidden;
+   margin-bottom: 16px; border: 2px solid;
+ }
+ .result-badge {
+   position: absolute; top: 0; right: 0; font-size: 10px; font-weight: 800;
+   padding: 4px 14px; border-radius: 0 20px 0 14px; color: #000; letter-spacing: 1px;
+ }
+ .result-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+ .result-icon { font-size: 22px; }
+ .result-lbl { font-size: 10px; font-weight: 700; letter-spacing: 2px; }
+ .result-speed { font-size: 52px; font-weight: 900; color: #fff; line-height: 1; font-family: 'Space Mono', monospace; }
+ .result-speed-unit { font-size: 18px; color: #bbb; margin-left: 8px; }
+ .result-divider { height: 1.5px; margin: 14px 0; }
+ .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+ .stat-lbl { color: #888; font-size: 10px; letter-spacing: 1px; margin-bottom: 3px; }
+ .stat-val { color: #f0f0f0; font-size: 15px; font-weight: 700; }
+ .stat-sub { color: #aaa; font-size: 11px; }
+ .cons-row { display: flex; align-items: center; gap: 10px; }
+ .cons-lbl { color: #888; font-size: 10px; white-space: nowrap; }
+ .cons-bar-wrap { flex: 1; background: #202038; border-radius: 5px; height: 8px; overflow: hidden; }
+ .cons-bar { height: 100%; border-radius: 5px; transition: width 0.4s; }
+ .cons-val { color: #ddd; font-size: 12px; white-space: nowrap; }
+
+ /* ── Chart ── */
+ .chart-wrap { background: #0c0c1e; border: 2px solid #252545; border-radius: 16px; padding: 16px 14px; margin-bottom: 16px; }
+ .chart-bars { display: flex; align-items: flex-end; gap: 3px; height: 72px; }
+ .chart-bar { flex: 1; border-radius: 3px 3px 0 0; transition: all 0.4s; position: relative; }
+ .chart-label-row { display: flex; justify-content: space-between; margin-top: 6px; }
+ .chart-axis { color: #666; font-size: 9px; }
+
+ /* ── Compare ── */
+ .compare-item {
+   background: #0c0c1e; border: 2px solid #252545; border-radius: 15px;
+   padding: 14px 16px; display: flex; align-items: center; gap: 12px;
+   margin-bottom: 8px; width: 100%;
+   text-align: left;
+ }
+ .compare-icon { font-size: 20px; flex-shrink: 0; }
+ .compare-body { flex: 1; }
+ .compare-modename { font-size: 9px; letter-spacing: 1.5px; margin-bottom: 2px; }
+ .compare-speed { color: #fff; font-size: 21px; font-weight: 700; }
+ .compare-right { text-align: right; flex-shrink: 0; }
+ .compare-time { color: #eee; font-size: 13px; font-weight: 700; }
+ .compare-sub { color: #aaa; font-size: 11px; }
+
+ /* ── Consumption table ── */
+ .cons-table-row { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; }
+ .cons-table-speed { color: #aaa; font-size: 11px; width: 30px; text-align: right; }
+ .cons-table-speed.hl { color: #fff; font-weight: 700; }
+ .cons-table-bar-wrap { flex: 1; background: #1c1c36; border-radius: 5px; height: 9px; overflow: hidden; }
+ .cons-table-bar { height: 100%; border-radius: 5px; background: #3a3a60; transition: width 0.4s; }
+ .cons-table-val { font-size: 11px; color: #bbb; width: 72px; text-align: right; }
+ .cons-table-val.hl { font-weight: 700; }
+
+ /* ── Disclaimer ── */
+ .disclaimer { margin-top: 16px; padding: 12px 14px; background: #0a0a1a; border: 1.5px solid #1c1c38; border-radius: 12px; color: #777; font-size: 10px; line-height: 1.8; margin-bottom: 8px; }
+
+ /* ── Settings overlay ── */
+ .overlay { position: fixed; inset: 0; background: #000d; z-index: 100; display: none; align-items: flex-end; justify-content: center; }
+ .overlay.open { display: flex; }
+ .settings-panel {
+   background: #0c0c20; border: 2px solid #252545; border-radius: 22px 22px 0 0;
+   padding: 24px 20px 32px; width: 100%; max-width: 480px;
+   max-height: 90vh; overflow-y: auto;
+   padding-bottom: calc(32px + env(safe-area-inset-bottom));
+ }
+ .settings-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+ .settings-title { color: #a78bfa; font-size: 11px; font-weight: 700; letter-spacing: 3px; }
+ .close-btn {
+   background: #1a1a32; border: 1px solid #2a2a48; color: #bbb;
+   width: 32px; height: 32px; border-radius: 9px; font-size: 16px;
+ }
+ .section-lbl {
+   font-size: 9px; letter-spacing: 3px; margin-top: 20px; margin-bottom: 12px;
+   border-bottom: 1px solid; padding-bottom: 7px;
+ }
+ .slider-row { margin-bottom: 18px; }
+ .slider-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 7px; }
+ .slider-name { color: #bbb; font-size: 12px; }
+ .slider-note { color: #666; font-size: 10px; margin-left: 6px; }
+ .slider-val { font-size: 14px; font-weight: 700; }
+
+ /* Towing toggle card */
+ .tow-toggle {
+   display: flex; align-items: center; justify-content: space-between;
+   border: 2px solid #252545; border-radius: 14px; padding: 14px 16px;
+   margin-bottom: 16px; cursor: pointer; transition: border-color 0.2s, background 0.2s;
+ }
+ .tow-toggle.on { border-color: #fb923c; background: #1c0e0a; }
+ .tow-name { font-size: 13px; font-weight: 700; }
+ .tow-sub { font-size: 10px; color: #666; margin-top: 3px; }
+ .toggle-pill {
+   width: 46px; height: 26px; border-radius: 13px; position: relative;
+   transition: background 0.25s; flex-shrink: 0; border: 2px solid;
+   background: #252545; border-color: #353560;
+ }
+ .toggle-pill.on { background: #fb923c; border-color: #fb923c; }
+ .toggle-knob {
+   position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+   border-radius: 50%; background: #fff; transition: left 0.22s; box-shadow: 0 1px 4px #0008;
+ }
+ .toggle-pill.on .toggle-knob { left: 22px; }
+
+ .tow-preview { background: #180e08; border: 1px solid #fb923c44; border-radius: 11px; padding: 12px 14px; margin-bottom: 12px; color: #fb923c; font-size: 11px; line-height: 1.8; }
+ .tow-fields { display: none; }
+ .tow-fields.visible { display: block; }
+
+ .settings-btns { display: flex; gap: 10px; margin-top: 20px; }
+ .reset-btn { flex: 1; background: #0e0e1e; border: 1.5px solid #252545; color: #888; border-radius: 11px; padding: 13px 0; font-size: 10px; letter-spacing: 1px; }
+ .apply-btn { flex: 2; background: linear-gradient(135deg, #7c6af7, #4fc3f7); color: #fff; border-radius: 11px; padding: 13px 0; font-weight: 700; font-size: 12px; letter-spacing: 1px; }
+
+ /* Towing warning */
+ .tow-warn { color: #fb923c; font-size: 11px; background: #1c0e06; padding: 8px 12px; border-radius: 8px; margin-top: 10px; display: none; }
+ .tow-warn.visible { display: block; }
+
+ /* Wohnwagen badge in title */
+ .ww-badge { font-size: 14px; color: #fb923c; margin-left: 8px; font-family: 'Space Mono', monospace; }
+
+ /* install hint */
+ .install-hint {
+   background: #0c0c1e; border: 1.5px solid #252545; border-radius: 12px;
+   padding: 12px 14px; margin-bottom: 16px; font-size: 10px; color: #888; line-height: 1.8;
+   display: none;
+ }
+ .install-hint.show { display: block; }
+</style>
+</head>
+<body>
+<div id="app">
+
+ <!-- ── HEADER ── -->
+ <div class="header">
+   <div class="header-row">
+     <div>
+       <div class="header-eyebrow">EV ROUTE OPTIMIZER</div>
+       <div class="header-title">Optimal <span>Fahren</span><span class="ww-badge" id="wwBadge" style="display:none">🚐</span></div>
+     </div>
+     <button class="settings-btn" onclick="openSettings()">⚙ Settings</button>
+   </div>
+   <div class="chips" id="chips"></div>
+ </div>
+
+ <!-- ── MAIN ── -->
+ <div class="main">
+
+   <!-- Install hint (shown once in Safari) -->
+   <div class="install-hint" id="installHint">
+     📲 <strong style="color:#4fc3f7">Tipp:</strong> Tippe auf Teilen → „Zum Home-Bildschirm" um diese App wie eine native App zu speichern.
+   </div>
+
+   <!-- Distance -->
+   <div class="card">
+     <div class="dist-row">
+       <span class="card-label" style="margin:0">STRECKENLÄNGE</span>
+       <div><span class="dist-val" id="distVal">400</span><span class="dist-unit">km</span></div>
+     </div>
+     <input type="range" id="distSlider" min="50" max="1500" step="25" value="400" oninput="onDistChange(this.value)">
+     <div class="quick-btns" id="distBtns"></div>
+   </div>
+
+   <!-- Mode selector -->
+   <div class="mode-grid" id="modeGrid"></div>
+
+   <!-- Fixed speed card -->
+   <div class="fixspeed-card" id="fixCard">
+     <div class="fixspeed-row">
+       <span class="fixspeed-lbl">🎯 MEINE GESCHWINDIGKEIT</span>
+       <div><span class="fixspeed-val" id="fixVal">120</span><span class="dist-unit">km/h</span></div>
+     </div>
+     <input type="range" id="fixSlider" min="80" max="160" step="5" value="120" oninput="onFixChange(this.value)" style="accent-color:#a78bfa">
+     <div class="quick-btns" id="fixBtns"></div>
+     <div class="tow-warn" id="towWarn">⚠ Wohnwagen-Modus: auf 105 km/h begrenzt</div>
+   </div>
+
+   <!-- Result card -->
+   <div class="result-card" id="resultCard">
+     <div class="result-badge" id="resultBadge">OPTIMAL</div>
+     <div class="result-header">
+       <span class="result-icon" id="resultIcon">⚡</span>
+       <span class="result-lbl" id="resultLbl"></span>
+     </div>
+     <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:14px">
+       <span class="result-speed" id="resultSpeed">--</span>
+       <span class="result-speed-unit">km/h</span>
+       <span id="maxBadge" style="display:none;font-size:10px;color:#fb923c;background:#200e06;border:1px solid #fb923c55;padding:2px 8px;border-radius:7px;font-family:'Space Mono',monospace">max 105</span>
+     </div>
+     <div class="result-divider" id="resultDivider"></div>
+     <div class="result-grid" id="resultGrid"></div>
+     <div class="cons-row">
+       <span class="cons-lbl">VERBRAUCH</span>
+       <div class="cons-bar-wrap"><div class="cons-bar" id="consBar"></div></div>
+       <span class="cons-val" id="consVal">--</span>
+     </div>
+   </div>
+
+   <!-- Chart -->
+   <div class="chart-wrap">
+     <span class="card-label">GESAMTZEIT NACH TEMPO</span>
+     <div class="chart-bars" id="chartBars"></div>
+     <div class="chart-label-row">
+       <span class="chart-axis" id="chartMin">80 km/h</span>
+       <span class="chart-axis" id="chartMax">160 km/h</span>
+     </div>
+   </div>
+
+   <!-- Compare -->
+   <div>
+     <span class="card-label">ALLE OPTIONEN</span>
+     <div id="compareList"></div>
+   </div>
+
+   <!-- Consumption table -->
+   <div class="card" style="margin-top:8px">
+     <span class="card-label">VERBRAUCHSKURVE</span>
+     <div id="consTable"></div>
+   </div>
+
+   <!-- Disclaimer -->
+   <div class="disclaimer">
+     ℹ Vereinfachtes Modell: Rollwiderstand + Luftwiderstand (∝ v²), kalibriert über Verbrauch bei 95 km/h. Reale Werte abhängig von Topografie, Wetter, Klima und Fahrweise.
+   </div>
+ </div>
+</div>
+
+<!-- ── SETTINGS OVERLAY ── -->
+<div class="overlay" id="overlay" onclick="overlayClick(event)">
+ <div class="settings-panel" id="settingsPanel">
+   <div class="settings-header">
+     <span class="settings-title">⚙ FAHRZEUG-SETTINGS</span>
+     <button class="close-btn" onclick="closeSettings()">✕</button>
+   </div>
+
+   <div class="section-lbl" style="color:#7c6af7;border-color:#7c6af744">FAHRZEUG</div>
+   <div id="sl_batteryKwh"></div>
+   <div id="sl_baseConsumption"></div>
+   <div id="sl_cons95"></div>
+
+   <div class="section-lbl" style="color:#7c6af7;border-color:#7c6af744">LADEN</div>
+   <div id="sl_chargePower"></div>
+   <div id="sl_startSoc"></div>
+   <div id="sl_maxSoc"></div>
+   <div id="sl_minSoc"></div>
+
+   <div class="section-lbl" style="color:#f7c948;border-color:#f7c94844">KOSTEN</div>
+   <div id="sl_pricePerKwh"></div>
+
+   <div class="section-lbl" style="color:#fb923c;border-color:#fb923c44">🚐 WOHNWAGEN / ANHÄNGER</div>
+   <div class="tow-toggle" id="towToggle" onclick="toggleTow()">
+     <div>
+       <div class="tow-name" id="towName">Wohnwagen aktiv</div>
+       <div class="tow-sub">Deckelt Höchstgeschwindigkeit auf 105 km/h</div>
+     </div>
+     <div class="toggle-pill" id="towPill"><div class="toggle-knob"></div></div>
+   </div>
+   <div class="tow-fields" id="towFields">
+     <div id="sl_towingWeightKg"></div>
+     <div id="sl_towingBaseExtra"></div>
+     <div id="sl_towingCons95Extra"></div>
+     <div class="tow-preview" id="towPreview"></div>
+   </div>
+
+   <div class="settings-btns">
+     <button class="reset-btn" onclick="resetSettings()">RESET</button>
+     <button class="apply-btn" onclick="applySettings()">ÜBERNEHMEN →</button>
+   </div>
+ </div>
+</div>
+
+<script>
+// ─── State ────────────────────────────────────────────────────────────────────
+const DEFAULT = {
+ batteryKwh: 77, baseConsumption: 13, cons95: 18,
+ maxSoc: 0.9, minSoc: 0.1, startSoc: 0.9,
+ chargePower: 150, pricePerKwh: 0.45,
+ towingEnabled: false, towingWeightKg: 1500,
+ towingBaseExtra: 5, towingCons95Extra: 10,
+};
+
+let cfg = loadCfg();
+let distance = 400;
+let mode = 'schnell';
+let fixedSpeed = 120;
+
+// Persist
+function loadCfg() {
+ try { const s = localStorage.getItem('evcfg'); if (s) return {...DEFAULT,...JSON.parse(s)}; } catch(e) {}
+ return {...DEFAULT};
+}
+function saveCfg() { try { localStorage.setItem('evcfg', JSON.stringify(cfg)); } catch(e) {} }
+
+// ─── Physics ──────────────────────────────────────────────────────────────────
+function buildA(base, ref95) { return Math.max(0, (ref95 - base) / (95*95)); }
+
+function consumptionAt(v, c) {
+ const a = buildA(c.baseConsumption, c.cons95);
+ let cons = c.baseConsumption + a*v*v;
+ if (c.towingEnabled) {
+   const at = buildA(c.towingBaseExtra, c.towingCons95Extra);
+   cons += c.towingBaseExtra + at*v*v;
+ }
+ return Math.max(5, cons);
+}
+
+function simulate(totalKm, speed, c) {
+ const cons = consumptionAt(speed, c);
+ const minKwh = c.batteryKwh * c.minSoc;
+ const maxKwh = c.batteryKwh * c.maxSoc;
+ const usableKwh = maxKwh - minKwh;
+ let cur = c.batteryKwh * c.startSoc;
+ let driven=0, stops=0, chargeMin=0, energy=0;
+ while (driven < totalKm) {
+   const rem = totalKm - driven;
+   const range = ((cur - minKwh) / cons) * 100;
+   if (rem <= range) { energy += (rem/100)*cons; driven = totalKm; }
+   else { driven += range; energy += cur-minKwh; stops++; chargeMin += (usableKwh/c.chargePower)*60; cur = maxKwh; }
+ }
+ const tDrive = (totalKm/speed)*60;
+ return { speed, cons, energy, stops, tDrive, tCharge:chargeMin, tTotal:tDrive+chargeMin, cost:energy*c.pricePerKwh };
+}
+
+function sweep(km, c) {
+ const maxV = c.towingEnabled ? 105 : 160;
+ const out = [];
+ for (let v=80; v<=maxV; v+=5) out.push(simulate(km,v,c));
+ return out;
+}
+
+function best(arr, key) { return arr.reduce((a,b) => a[key]<=b[key]?a:b); }
+
+function fmt(min) {
+ const h=Math.floor(min/60), m=Math.round(min%60);
+ return h>0 ? `${h}h ${m<10?'0':''}${m}min` : `${m}min`;
+}
+
+// ─── Mode definitions ─────────────────────────────────────────────────────────
+const MODES = [
+ { key:'schnell', label:'Schnellste Route',  icon:'⚡', color:'#f7c948' },
+ { key:'sparsam', label:'Günstigste Route',  icon:'💶', color:'#4ade80' },
+ { key:'wenig',   label:'Wenigste Stopps',   icon:'🔋', color:'#fb923c' },
+ { key:'fix',     label:'Meine Geschw.',      icon:'🎯', color:'#a78bfa' },
+];
+
+// ─── Render ───────────────────────────────────────────────────────────────────
+function render() {
+ const maxV = cfg.towingEnabled ? 105 : 160;
+ const results = sweep(distance, cfg);
+ const bTime  = best(results, 'tTotal');
+ const bCost  = best(results, 'cost');
+ const bStops = best(results, 'stops');
+ const clampedFix = Math.min(fixedSpeed, maxV);
+ const fixRes = simulate(distance, clampedFix, cfg);
+
+ const modeResults = { schnell:bTime, sparsam:bCost, wenig:bStops, fix:fixRes };
+ const sel = MODES.find(m=>m.key===mode);
+ const selR = modeResults[mode];
+ const hlSpeed = mode==='fix' ? clampedFix : selR.speed;
+
+ // Chips
+ const chips = [
+   { t: cfg.batteryKwh+' kWh', c:'#7c6af7' },
+   { t: cfg.chargePower+' kW DC', c:'#4fc3f7' },
+   { t: Math.round(cfg.startSoc*100)+'% SoC', c:'#4ade80' },
+   { t: cfg.pricePerKwh.toFixed(2)+' €/kWh', c:'#f7c948' },
+   { t: cfg.cons95.toFixed(1)+' kWh@95', c:'#aaa' },
+   ...(cfg.towingEnabled ? [{ t:'🚐 '+cfg.towingWeightKg+' kg',c:'#fb923c'},{ t:'max 105 km/h',c:'#fb923c'}] : []),
+ ];
+ document.getElementById('chips').innerHTML = chips.map(({t,c}) =>
+   `<div class="chip" style="color:${c};border-color:${c}44;background:${c}1a">${t}</div>`
+ ).join('');
+
+ // WW badge
+ document.getElementById('wwBadge').style.display = cfg.towingEnabled ? '' : 'none';
+
+ // Distance
+ document.getElementById('distVal').textContent = distance;
+ document.getElementById('distSlider').value = distance;
+ const distBtns = document.getElementById('distBtns');
+ distBtns.innerHTML = [100,300,500,800,1200].map(v =>
+   `<button class="quick-btn ${distance===v?'active':''}" onclick="setDist(${v})">${v}</button>`
+ ).join('');
+
+ // Mode grid
+ document.getElementById('modeGrid').innerHTML = MODES.map(m => `
+   <button class="mode-btn" onclick="setMode('${m.key}')"
+     style="border-color:${mode===m.key?m.color:'#252545'};background:${mode===m.key?m.color+'1c':'#0c0c1e'};box-shadow:${mode===m.key?`0 0 20px ${m.color}30`:'none'}">
+     <div class="mode-icon">${m.icon}</div>
+     <div class="mode-lbl" style="color:${mode===m.key?m.color:'#999'}">${m.label.split(' ').join('<br>')}</div>
+   </button>
+ `).join('');
+
+ // Fix speed card
+ const fixCard = document.getElementById('fixCard');
+ fixCard.className = 'fixspeed-card' + (mode==='fix' ? ' visible' : '');
+ document.getElementById('fixVal').textContent = clampedFix;
+ const fixSlider = document.getElementById('fixSlider');
+ fixSlider.max = maxV; fixSlider.value = clampedFix;
+ document.getElementById('fixBtns').innerHTML =
+   (cfg.towingEnabled ? [80,90,95,100,105] : [80,100,110,120,130]).map(v =>
+     `<button class="quick-btn ${clampedFix===v?'active':''}" style="${clampedFix===v?'background:#a78bfa;border-color:#a78bfa;color:#fff':''}" onclick="setFixSpeed(${v})">${v}</button>`
+   ).join('');
+ document.getElementById('towWarn').className = 'tow-warn' + (fixedSpeed>maxV?' visible':'');
+
+ // Result card
+ const rc = document.getElementById('resultCard');
+ rc.style.borderColor = sel.color;
+ rc.style.background = `linear-gradient(140deg, ${sel.color}14, #0c0c1e)`;
+ rc.style.boxShadow = `0 0 36px ${sel.color}22`;
+ document.getElementById('resultBadge').style.background = sel.color;
+ document.getElementById('resultIcon').textContent = sel.icon;
+ document.getElementById('resultLbl').textContent = sel.label.toUpperCase();
+ document.getElementById('resultLbl').style.color = sel.color;
+ document.getElementById('resultDivider').style.background = sel.color+'33';
+ document.getElementById('resultSpeed').textContent = selR.speed;
+ document.getElementById('maxBadge').style.display = cfg.towingEnabled ? '' : 'none';
+ document.getElementById('resultGrid').innerHTML = [
+   { l:'FAHRZEIT', v:fmt(selR.tDrive), s:null },
+   { l:'LADEPAUSEN', v:fmt(selR.tCharge), s:selR.stops+' Stopp'+(selR.stops!==1?'s':'') },
+   { l:'GESAMTZEIT', v:fmt(selR.tTotal), s:null },
+   { l:'KOSTEN', v:selR.cost.toFixed(2)+' €', s:selR.energy.toFixed(1)+' kWh' },
+ ].map(({l,v,s}) => `
+   <div>
+     <div class="stat-lbl">${l}</div>
+     <div class="stat-val">${v}</div>
+     ${s?`<div class="stat-sub">${s}</div>`:''}
+   </div>
+ `).join('');
+ const consBarEl = document.getElementById('consBar');
+ consBarEl.style.width = Math.min(100,(selR.cons/55)*100)+'%';
+ consBarEl.style.background = sel.color;
+ document.getElementById('consVal').textContent = selR.cons.toFixed(1)+' kWh/100km';
+ document.getElementById('consVal').style.color = sel.color;
+
+ // Chart
+ const tVals = results.map(r=>r.tTotal);
+ const maxT = Math.max(...tVals), minT = Math.min(...tVals);
+ const bSpd = best(results,'tTotal').speed;
+ document.getElementById('chartBars').innerHTML = results.map(r => {
+   const norm = maxT===minT ? 0.5 : (r.tTotal-minT)/(maxT-minT);
+   const h = Math.round(12 + norm*60);
+   const isBest = r.speed===bSpd, isSel = r.speed===hlSpeed;
+   const bg = isBest ? sel.color : isSel ? '#a78bfa' : '#252545';
+   const shadow = isBest ? `0 0 10px ${sel.color}77` : 'none';
+   return `<div class="chart-bar" style="height:${h}px;background:${bg};box-shadow:${shadow}"></div>`;
+ }).join('');
+ document.getElementById('chartMin').textContent = results[0].speed+' km/h';
+ document.getElementById('chartMax').textContent = results[results.length-1].speed+' km/h';
+
+ // Compare list
+ document.getElementById('compareList').innerHTML = MODES.filter(m=>m.key!==mode).map(m => {
+   const r = modeResults[m.key];
+   const spd = m.key==='fix' ? clampedFix : r.speed;
+   return `
+     <button class="compare-item" onclick="setMode('${m.key}')">
+       <span class="compare-icon">${m.icon}</span>
+       <div class="compare-body">
+         <div class="compare-modename" style="color:${m.color}">${m.label.toUpperCase()}</div>
+         <div class="compare-speed">${spd} km/h</div>
+       </div>
+       <div class="compare-right">
+         <div class="compare-time">${fmt(r.tTotal)}</div>
+         <div class="compare-sub">${r.cost.toFixed(2)} € · ${r.stops} Stopp${r.stops!==1?'s':''}</div>
+       </div>
+     </button>`;
+ }).join('');
+
+ // Consumption table
+ const speeds = [80,95,110,120,130,150].filter(v=>v<=maxV);
+ const maxC = consumptionAt(maxV, cfg);
+ document.getElementById('consTable').innerHTML = speeds.map(v => {
+   const c = consumptionAt(v, cfg);
+   const isHl = v===hlSpeed;
+   const barW = Math.round((c/(maxC*1.08))*100);
+   return `
+     <div class="cons-table-row">
+       <span class="cons-table-speed ${isHl?'hl':''}">${v}</span>
+       <div class="cons-table-bar-wrap">
+         <div class="cons-table-bar" style="width:${barW}%;background:${isHl?sel.color:'#3a3a60'}"></div>
+       </div>
+       <span class="cons-table-val ${isHl?'hl':''}" style="color:${isHl?sel.color:'#bbb'}">${c.toFixed(1)} kWh</span>
+     </div>`;
+ }).join('');
+}
+
+// ─── Event handlers ───────────────────────────────────────────────────────────
+function onDistChange(v) { distance = parseInt(v); render(); }
+function setDist(v) { distance = v; document.getElementById('distSlider').value = v; render(); }
+function setMode(m) { mode = m; render(); }
+function onFixChange(v) { fixedSpeed = parseInt(v); render(); }
+function setFixSpeed(v) { fixedSpeed = v; document.getElementById('fixSlider').value = v; render(); }
+
+// ─── Settings ─────────────────────────────────────────────────────────────────
+let draft = {};
+
+const SLIDERS = [
+ { id:'batteryKwh',       label:'Batteriekapazität',       note:'',                            min:20,  max:150, step:1,    unit:' kWh',        color:'#7c6af7' },
+ { id:'baseConsumption',  label:'Grundverbrauch',          note:'(Rollen+Klima, ~0 km/h)',     min:5,   max:20,  step:0.5,  unit:' kWh/100km',  color:'#7c6af7' },
+ { id:'cons95',           label:'Verbrauch bei 95 km/h',   note:'(Referenzpunkt)',              min:10,  max:40,  step:0.5,  unit:' kWh/100km',  color:'#4fc3f7' },
+ { id:'chargePower',      label:'Ladeleistung (DC)',        note:'',                            min:11,  max:350, step:5,    unit:' kW',         color:'#7c6af7' },
+ { id:'startSoc',         label:'Start-Ladestand',         note:'',                            min:0.1, max:1,   step:0.05, unit:'%',  scale:100, color:'#7c6af7' },
+ { id:'maxSoc',           label:'Laden bis (max. SoC)',     note:'',                            min:0.5, max:1,   step:0.05, unit:'%',  scale:100, color:'#7c6af7' },
+ { id:'minSoc',           label:'Fahren bis (min. SoC)',    note:'',                            min:0,   max:0.3, step:0.05, unit:'%',  scale:100, color:'#7c6af7' },
+ { id:'pricePerKwh',      label:'Strompreis',               note:'',                            min:0.1, max:1.2, step:0.01, unit:' €/kWh',      color:'#f7c948' },
+ { id:'towingWeightKg',   label:'Gewicht Anhänger',         note:'',                            min:300, max:3500,step:50,   unit:' kg',         color:'#fb923c' },
+ { id:'towingBaseExtra',  label:'Mehrverbrauch Grundlast',  note:'(Rollwiderstand)',             min:1,   max:15,  step:0.5,  unit:' kWh/100km',  color:'#fb923c' },
+ { id:'towingCons95Extra',label:'Mehrverbrauch bei 95 km/h',note:'(extra gegenüber Solo)',       min:4,   max:30,  step:0.5,  unit:' kWh/100km',  color:'#fb923c' },
+];
+
+function buildSliders() {
+ SLIDERS.forEach(s => {
+   const el = document.getElementById('sl_'+s.id);
+   if (!el) return;
+   el.innerHTML = `
+     <div class="slider-row">
+       <div class="slider-top">
+         <span class="slider-name">${s.label}<span class="slider-note">${s.note}</span></span>
+         <span class="slider-val" id="sv_${s.id}" style="color:${s.color}"></span>
+       </div>
+       <input type="range" id="si_${s.id}" min="${s.min}" max="${s.max}" step="${s.step}"
+         style="accent-color:${s.color}"
+         oninput="draftChange('${s.id}',this.value)">
+     </div>`;
+ });
+}
+
+function syncDraftUI() {
+ SLIDERS.forEach(s => {
+   const v = draft[s.id];
+   const raw = s.scale ? v*s.scale : v;
+   const disp = s.step<0.05 ? raw.toFixed(2) : Number.isInteger(raw) ? raw : raw.toFixed(1);
+   const el = document.getElementById('sv_'+s.id);
+   const inp = document.getElementById('si_'+s.id);
+   if (el) el.textContent = disp + s.unit;
+   if (inp) inp.value = v;
+ });
+ // tow toggle
+ const on = draft.towingEnabled;
+ document.getElementById('towPill').className = 'toggle-pill'+(on?' on':'');
+ document.getElementById('towName').style.color = on ? '#fb923c' : '#aaa';
+ document.getElementById('towFields').className = 'tow-fields'+(on?' visible':'');
+ document.getElementById('towPreview').innerHTML =
+   `Gesamtverbrauch bei 95 km/h:<br><strong style="color:#fff">${(draft.cons95+draft.towingCons95Extra).toFixed(1)} kWh/100km</strong><span style="color:#888"> (${draft.cons95.toFixed(1)} solo + ${draft.towingCons95Extra.toFixed(1)} WW)</span>`;
+}
+
+function draftChange(id, val) {
+ const s = SLIDERS.find(x=>x.id===id);
+ draft[id] = parseFloat(val);
+ const raw = s.scale ? draft[id]*s.scale : draft[id];
+ const disp = s.step<0.05 ? raw.toFixed(2) : Number.isInteger(raw) ? raw : raw.toFixed(1);
+ document.getElementById('sv_'+id).textContent = disp + s.unit;
+ if (id==='cons95'||id==='towingCons95Extra') syncDraftUI();
+}
+
+function toggleTow() {
+ draft.towingEnabled = !draft.towingEnabled;
+ syncDraftUI();
+}
+
+function openSettings() {
+ draft = {...cfg};
+ syncDraftUI();
+ document.getElementById('overlay').className = 'overlay open';
+ document.body.style.overflow = 'hidden';
+}
+
+function closeSettings() {
+ document.getElementById('overlay').className = 'overlay';
+ document.body.style.overflow = '';
+}
+
+function overlayClick(e) {
+ if (e.target === document.getElementById('overlay')) closeSettings();
+}
+
+function applySettings() {
+ cfg = {...draft};
+ saveCfg();
+ closeSettings();
+ render();
+}
+
+function resetSettings() {
+ draft = {...DEFAULT};
+ syncDraftUI();
+}
+
+// ─── Safari install hint ──────────────────────────────────────────────────────
+function checkInstallHint() {
+ const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+ const isStandalone = window.navigator.standalone === true;
+ const shown = localStorage.getItem('installHintShown');
+ if (isIOS && !isStandalone && !shown) {
+   document.getElementById('installHint').className = 'install-hint show';
+   localStorage.setItem('installHintShown', '1');
+ }
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+buildSliders();
+checkInstallHint();
+render();
+</script>
+</body>
+</html>
