@@ -123,6 +123,16 @@
  .cons-bar { height: 100%; border-radius: 5px; transition: width 0.4s; }
  .cons-val { color: #ddd; font-size: 12px; white-space: nowrap; }
 
+ .diesel-compare {
+   margin-top: 16px; padding-top: 14px; border-top: 1.5px solid #252545;
+   display: grid; gap: 8px;
+ }
+ .diesel-title { color: #f97316; font-size: 10px; letter-spacing: 2px; font-weight: 700; }
+ .diesel-row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+ .diesel-lbl { color: #888; font-size: 10px; letter-spacing: 1px; }
+ .diesel-val { color: #eee; font-size: 13px; font-weight: 700; text-align: right; }
+ .diesel-diff { margin-top: 2px; padding: 8px 10px; border-radius: 9px; font-size: 11px; line-height: 1.5; border: 1px solid; }
+
  /* ── Chart ── */
  .chart-wrap { background: #0c0c1e; border: 2px solid #252545; border-radius: 16px; padding: 16px 14px; margin-bottom: 16px; }
  .chart-bars { display: flex; align-items: flex-end; gap: 3px; height: 72px; }
@@ -235,7 +245,7 @@
    <div class="header-row">
      <div>
        <div class="header-eyebrow">EV ROUTE OPTIMIZER</div>
-       <div class="header-title">ASCOT <span>RECHNET</span><br>SCHARF<span class="ww-badge" id="wwBadge" style="display:none">🚐</span></div>
+       <div class="header-title">ASCOT <span>RECHNET SCHARF</span><span class="ww-badge" id="wwBadge" style="display:none">🚐</span></div>
      </div>
      <button class="settings-btn" onclick="openSettings()">⚙ Settings</button>
    </div>
@@ -293,6 +303,7 @@
        <div class="cons-bar-wrap"><div class="cons-bar" id="consBar"></div></div>
        <span class="cons-val" id="consVal">--</span>
      </div>
+     <div class="diesel-compare" id="dieselCompare"></div>
    </div>
 
    <!-- Chart -->
@@ -319,7 +330,7 @@
 
    <!-- Disclaimer -->
    <div class="disclaimer">
-     ℹ Vereinfachtes Modell: Verbrauch = Roll-/Grundanteil + Luftwiderstandsanteil (∝ v²), kalibriert über den Verbrauch bei 95 km/h. Reale Werte abhängig von Topografie, Wetter, Klima und Fahrweise.
+     ℹ Vereinfachtes Modell: Rollwiderstand + Luftwiderstand (∝ v²), kalibriert über Verbrauch bei 95 km/h. Reale Werte abhängig von Topografie, Wetter, Klima und Fahrweise.
    </div>
  </div>
 </div>
@@ -346,6 +357,10 @@
    <div class="section-lbl" style="color:#f7c948;border-color:#f7c94844">KOSTEN</div>
    <div id="sl_pricePerKwh"></div>
 
+   <div class="section-lbl" style="color:#f97316;border-color:#f9731644">VERGLEICH: VW CADDY DIESEL</div>
+   <div id="sl_dieselConsumption"></div>
+   <div id="sl_dieselPrice"></div>
+
    <div class="section-lbl" style="color:#fb923c;border-color:#fb923c44">🚐 WOHNWAGEN / ANHÄNGER</div>
    <div class="tow-toggle" id="towToggle" onclick="toggleTow()">
      <div>
@@ -370,16 +385,13 @@
 
 <script>
 // ─── State ────────────────────────────────────────────────────────────────────
-const MODEL_VERSION = 3;
-
+const MODEL_VERSION = 4;
 const DEFAULT = {
  modelVersion: MODEL_VERSION,
- // Kia e-Soul-nahe Startwerte. Wichtig: baseConsumption ist nur der
- // Roll-/Grundanteil am Verbrauch, nicht der Gesamtverbrauch bei 95 km/h.
- // Kalibrierung: 12 kWh/100 km bei 95 km/h, Laden bis 80%, Strompreis 0,64 €/kWh.
  batteryKwh: 64, baseConsumption: 6.5, cons95: 12,
  maxSoc: 0.8, minSoc: 0.1, startSoc: 0.9,
  chargePower: 75, pricePerKwh: 0.64,
+ dieselConsumption: 6.2, dieselPrice: 1.75,
  towingEnabled: false, towingWeightKg: 1500,
  towingBaseExtra: 5, towingCons95Extra: 10,
 };
@@ -391,65 +403,41 @@ let fixedSpeed = 120;
 
 // Persist
 function loadCfg() {
+ let saved = {};
  try {
    const s = localStorage.getItem('evcfg');
-   if (s) {
-     const saved = JSON.parse(s);
-     const merged = {...DEFAULT, ...saved};
-
-     // Migration vom alten Modell: Dort lag der Grundverbrauch oft fast so
-     // hoch wie der Referenzverbrauch bei 95 km/h. Dadurch blieb bei 160 km/h
-     // fast kein Luftwiderstandsanteil übrig. Bei alten gespeicherten Settings
-     // wird dieser Wert einmalig plausibilisiert.
-     if (!saved.modelVersion || saved.modelVersion < MODEL_VERSION) {
-       // Migration vom alten Modell v1: Grundverbrauch plausibilisieren, falls er
-       // fast so hoch wie der Referenzverbrauch war.
-       if (!saved.modelVersion || saved.modelVersion < 2) {
-         const ref95 = Number(merged.cons95) || DEFAULT.cons95;
-         const oldBase = Number(merged.baseConsumption) || DEFAULT.baseConsumption;
-         if (oldBase > ref95 * 0.75) {
-           merged.baseConsumption = Math.round(ref95 * 0.54 * 10) / 10;
-         }
-       }
-
-       // Migration v3: gewünschte Kia-e-Soul-Ausgangswerte setzen, damit nach
-       // dem GitHub-Update auch bereits gespeicherte iPhone-Settings aktualisiert werden.
-       if (!saved.modelVersion || saved.modelVersion < 3) {
-         merged.batteryKwh = DEFAULT.batteryKwh;
-         merged.baseConsumption = DEFAULT.baseConsumption;
-         merged.cons95 = DEFAULT.cons95;
-         merged.maxSoc = DEFAULT.maxSoc;
-         merged.pricePerKwh = DEFAULT.pricePerKwh;
-         merged.chargePower = DEFAULT.chargePower;
-       }
-
-       merged.modelVersion = MODEL_VERSION;
-       try { localStorage.setItem('evcfg', JSON.stringify(merged)); } catch(e) {}
-     }
-     return merged;
-   }
+   if (s) saved = JSON.parse(s) || {};
  } catch(e) {}
- return {...DEFAULT};
+ const merged = {...DEFAULT, ...saved};
+ if (!saved.modelVersion || saved.modelVersion < MODEL_VERSION) {
+   Object.assign(merged, {
+     modelVersion: MODEL_VERSION,
+     batteryKwh: 64,
+     baseConsumption: 6.5,
+     cons95: 12,
+     maxSoc: 0.8,
+     minSoc: 0.1,
+     startSoc: 0.9,
+     chargePower: 75,
+     pricePerKwh: 0.64,
+     dieselConsumption: saved.dieselConsumption ?? 6.2,
+     dieselPrice: saved.dieselPrice ?? 1.75,
+   });
+   try { localStorage.setItem('evcfg', JSON.stringify(merged)); } catch(e) {}
+ }
+ return merged;
 }
-function saveCfg() {
- try { cfg.modelVersion = MODEL_VERSION; localStorage.setItem('evcfg', JSON.stringify(cfg)); } catch(e) {}
-}
+function saveCfg() { try { cfg.modelVersion = MODEL_VERSION; localStorage.setItem('evcfg', JSON.stringify(cfg)); } catch(e) {} }
 
 // ─── Physics ──────────────────────────────────────────────────────────────────
-function consumptionAt(v, c) {
- // Modell: Verbrauch = Roll-/Grundanteil + Luftwiderstandsanteil.
- // Der Luftwiderstandsanteil wächst mit v² und wird über den 95-km/h-Wert kalibriert.
- const refSpeed = 95;
- const ref95 = Math.max(5, Number(c.cons95) || DEFAULT.cons95);
- const base = Math.min(Math.max(3, Number(c.baseConsumption) || DEFAULT.baseConsumption), ref95 - 0.1);
- const aeroAt95 = Math.max(0, ref95 - base);
- let cons = base + aeroAt95 * Math.pow(v / refSpeed, 2);
+function buildA(base, ref95) { return Math.max(0, (ref95 - base) / (95*95)); }
 
+function consumptionAt(v, c) {
+ const a = buildA(c.baseConsumption, c.cons95);
+ let cons = c.baseConsumption + a*v*v;
  if (c.towingEnabled) {
-   const towRef95 = Math.max(0, Number(c.towingCons95Extra) || 0);
-   const towBase = Math.min(Math.max(0, Number(c.towingBaseExtra) || 0), towRef95);
-   const towAero95 = Math.max(0, towRef95 - towBase);
-   cons += towBase + towAero95 * Math.pow(v / refSpeed, 2);
+   const at = buildA(c.towingBaseExtra, c.towingCons95Extra);
+   cons += c.towingBaseExtra + at*v*v;
  }
  return Math.max(5, cons);
 }
@@ -469,6 +457,12 @@ function simulate(totalKm, speed, c) {
  }
  const tDrive = (totalKm/speed)*60;
  return { speed, cons, energy, stops, tDrive, tCharge:chargeMin, tTotal:tDrive+chargeMin, cost:energy*c.pricePerKwh };
+}
+
+function dieselFor(totalKm, c) {
+ const liters = (totalKm/100) * c.dieselConsumption;
+ const cost = liters * c.dieselPrice;
+ return { liters, cost };
 }
 
 function sweep(km, c) {
@@ -583,6 +577,25 @@ function render() {
  document.getElementById('consVal').textContent = selR.cons.toFixed(1)+' kWh/100km';
  document.getElementById('consVal').style.color = sel.color;
 
+ const diesel = dieselFor(distance, cfg);
+ const diff = diesel.cost - selR.cost;
+ const evWins = diff >= 0;
+ const diffColor = evWins ? '#4ade80' : '#fb923c';
+ const diffLabel = evWins ? 'elektrisch günstiger' : 'Diesel günstiger';
+ document.getElementById('dieselCompare').innerHTML = `
+   <div class="diesel-title">VERGLEICH: VW CADDY DIESEL</div>
+   <div class="diesel-row">
+     <span class="diesel-lbl">Caddy</span>
+     <span class="diesel-val">${diesel.liters.toFixed(1)} l · ${diesel.cost.toFixed(2)} €</span>
+   </div>
+   <div class="diesel-row">
+     <span class="diesel-lbl">EV</span>
+     <span class="diesel-val">${selR.energy.toFixed(1)} kWh · ${selR.cost.toFixed(2)} €</span>
+   </div>
+   <div class="diesel-diff" style="color:${diffColor};border-color:${diffColor}55;background:${diffColor}14">
+     Differenz: <strong>${Math.abs(diff).toFixed(2)} €</strong> ${diffLabel}
+   </div>`;
+
  // Chart
  const tVals = results.map(r=>r.tTotal);
  const maxT = Math.max(...tVals), minT = Math.min(...tVals);
@@ -617,7 +630,7 @@ function render() {
  }).join('');
 
  // Consumption table
- const speeds = [80,95,110,120,130,140,150,160].filter(v=>v<=maxV);
+ const speeds = [80,95,110,120,130,150].filter(v=>v<=maxV);
  const maxC = consumptionAt(maxV, cfg);
  document.getElementById('consTable').innerHTML = speeds.map(v => {
    const c = consumptionAt(v, cfg);
@@ -646,13 +659,15 @@ let draft = {};
 
 const SLIDERS = [
  { id:'batteryKwh',       label:'Batteriekapazität',       note:'',                            min:20,  max:150, step:1,    unit:' kWh',        color:'#7c6af7' },
- { id:'baseConsumption',  label:'Roll-/Grundanteil',       note:'(Anteil bei 95 km/h)',         min:4,   max:20,  step:0.5,  unit:' kWh/100km',  color:'#7c6af7' },
+ { id:'baseConsumption',  label:'Grundverbrauch',          note:'(Rollen+Klima, ~0 km/h)',     min:5,   max:20,  step:0.5,  unit:' kWh/100km',  color:'#7c6af7' },
  { id:'cons95',           label:'Verbrauch bei 95 km/h',   note:'(Referenzpunkt)',              min:10,  max:40,  step:0.5,  unit:' kWh/100km',  color:'#4fc3f7' },
  { id:'chargePower',      label:'Ladeleistung (DC)',        note:'',                            min:11,  max:350, step:5,    unit:' kW',         color:'#7c6af7' },
  { id:'startSoc',         label:'Start-Ladestand',         note:'',                            min:0.1, max:1,   step:0.05, unit:'%',  scale:100, color:'#7c6af7' },
  { id:'maxSoc',           label:'Laden bis (max. SoC)',     note:'',                            min:0.5, max:1,   step:0.05, unit:'%',  scale:100, color:'#7c6af7' },
  { id:'minSoc',           label:'Fahren bis (min. SoC)',    note:'',                            min:0,   max:0.3, step:0.05, unit:'%',  scale:100, color:'#7c6af7' },
  { id:'pricePerKwh',      label:'Strompreis',               note:'',                            min:0.1, max:1.2, step:0.01, unit:' €/kWh',      color:'#f7c948' },
+ { id:'dieselConsumption',label:'VW Caddy Verbrauch',       note:'',                            min:3,   max:12,  step:0.1,  unit:' l/100km',    color:'#f97316' },
+ { id:'dieselPrice',      label:'Dieselpreis',              note:'',                            min:1,   max:2.8, step:0.01, unit:' €/l',         color:'#f97316' },
  { id:'towingWeightKg',   label:'Gewicht Anhänger',         note:'',                            min:300, max:3500,step:50,   unit:' kg',         color:'#fb923c' },
  { id:'towingBaseExtra',  label:'Mehrverbrauch Grundlast',  note:'(Rollwiderstand)',             min:1,   max:15,  step:0.5,  unit:' kWh/100km',  color:'#fb923c' },
  { id:'towingCons95Extra',label:'Mehrverbrauch bei 95 km/h',note:'(extra gegenüber Solo)',       min:4,   max:30,  step:0.5,  unit:' kWh/100km',  color:'#fb923c' },
